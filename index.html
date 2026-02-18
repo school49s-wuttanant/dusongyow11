@@ -48,6 +48,7 @@
             th, td {
                 border: 1px solid #000 !important;
                 padding: 8px !important;
+                font-size: 14px !important;
             }
             .print-header {
                 display: block !important;
@@ -231,6 +232,13 @@
             return `${year}-${String(monthIdx + 1).padStart(2, '0')}-${day}`;
         }
 
+        // ฟังก์ชันช่วยแยกตัวเลขจากรูปแบบ "บท.X / Y" เพื่อใช้ในการเรียงลำดับ
+        function extractDocRunningNumber(numStr) {
+            if (!numStr) return 0;
+            const match = numStr.match(/บท\.(\d+)/);
+            return match ? parseInt(match[1]) : 0;
+        }
+
         async function loadData() {
             loader.classList.remove('hidden');
             try {
@@ -238,7 +246,17 @@
                 const data = await response.json();
                 nextAutoNumber = data.nextNumber;
                 if (!isEditMode) docNumberInput.value = nextAutoNumber;
-                documents = data.items ? data.items.reverse() : [];
+                
+                // เก็บข้อมูลดิบ
+                const rawItems = data.items || [];
+                
+                // เรียงลำดับจากเลขทะเบียนน้อยไปมาก (ASC) เพื่อเวลาพิมพ์จะเรียง บท.1, บท.2...
+                documents = rawItems.sort((a, b) => {
+                    const numA = extractDocRunningNumber(a.number);
+                    const numB = extractDocRunningNumber(b.number);
+                    return numA - numB;
+                });
+
                 updateUI();
             } catch (error) {
                 console.error(error);
