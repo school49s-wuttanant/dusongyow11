@@ -185,6 +185,43 @@
         </footer>
     </div>
 
+    <!-- Success Modal -->
+    <div id="successModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden no-print">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden transform transition-all scale-95 opacity-0 duration-300" id="modalContent">
+            <div class="bg-green-600 p-4 text-center">
+                <div class="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-2 shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                </div>
+                <h3 class="text-white text-xl font-bold">บันทึกข้อมูลสำเร็จ!</h3>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="border-b pb-2">
+                    <p class="text-xs text-gray-500 font-bold uppercase tracking-wider">เลขที่บันทึก</p>
+                    <p id="summaryNum" class="text-lg font-bold text-blue-700"></p>
+                </div>
+                <div class="border-b pb-2">
+                    <p class="text-xs text-gray-500 font-bold uppercase tracking-wider">เรื่อง</p>
+                    <p id="summarySubject" class="text-gray-800 font-semibold"></p>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-xs text-gray-500 font-bold uppercase tracking-wider">วันที่ลงบันทึก</p>
+                        <p id="summaryDate" class="text-gray-800"></p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500 font-bold uppercase tracking-wider">ผู้รับผิดชอบ</p>
+                        <p id="summaryOwner" class="text-gray-800"></p>
+                    </div>
+                </div>
+                <button onclick="closeModal()" class="w-full bg-gray-800 hover:bg-black text-white font-bold py-3 rounded-xl transition-colors mt-4">
+                    ตกลง
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyaugfWISuD2x3ZC3TD3v4XxTzTO88NznTtwSKKy3OVqzGEwN5KMFW8AG0xaKxXTfQ2/exec';
         
@@ -205,6 +242,8 @@
         const formTitle = document.getElementById('formTitle');
         const editBadge = document.getElementById('editBadge');
         const cancelEditBtn = document.getElementById('cancelEditBtn');
+        const successModal = document.getElementById('successModal');
+        const modalContent = document.getElementById('modalContent');
 
         function formatThaiDate(dateInput) {
             if (!dateInput) return '-';
@@ -263,12 +302,9 @@
 
         // ฟังก์ชันสำหรับจัดลำดับข้อมูลที่จะนำไปแสดงผลบนหน้าเว็บ
         function getSortedDocs(docs, isForPrint = false) {
-            // ถ้าเป็นการพิมพ์ (window.print() จะดึงจาก DOM ที่ render ไปแล้ว) 
-            // แต่ในกรณีแสดงผลบน UI เราต้องการ "ล่าสุดขึ้นก่อน"
             if (isForPrint) {
-                return [...docs]; // ข้อมูลหลักเรียง 1, 2, 3 อยู่แล้ว
+                return [...docs]; 
             } else {
-                // สำหรับ UI: เรียงย้อนกลับเอาเลขมาก (ล่าสุด) ขึ้นก่อน
                 return [...docs].sort((a, b) => {
                     return extractDocRunningNumber(b.number) - extractDocRunningNumber(a.number);
                 });
@@ -278,14 +314,12 @@
         function updateUI() {
             const searchTerm = searchInput.value.toLowerCase();
             
-            // กรองข้อมูลตามคำค้นหา
             let filteredDocs = documents.filter(doc => 
                 String(doc.number).toLowerCase().includes(searchTerm) || 
                 String(doc.subject).toLowerCase().includes(searchTerm) ||
                 String(doc.owner).toLowerCase().includes(searchTerm)
             );
 
-            // เรียงลำดับสำหรับการแสดงผล (ล่าสุดขึ้นก่อน)
             const displayDocs = getSortedDocs(filteredDocs, false);
 
             tableBody.innerHTML = '';
@@ -319,24 +353,18 @@
             document.getElementById('currentPrintDate').textContent = formatThaiDate(new Date());
         }
 
-        // จัดการเหตุการณ์ก่อนสั่งพิมพ์ เพื่อเรียงลำดับให้ถูกต้องในใบรายงาน
         window.onbeforeprint = () => {
-            // เมื่อจะพิมพ์ ให้ Render ตารางใหม่แบบเรียงจากน้อยไปมาก
             const searchTerm = searchInput.value.toLowerCase();
             let filteredDocs = documents.filter(doc => 
                 String(doc.number).toLowerCase().includes(searchTerm) || 
                 String(doc.subject).toLowerCase().includes(searchTerm) ||
                 String(doc.owner).toLowerCase().includes(searchTerm)
             );
-            
-            // เรียง 1 -> 2 -> 3 สำหรับการพิมพ์
             const printDocs = [...filteredDocs].sort((a, b) => extractDocRunningNumber(a.number) - extractDocRunningNumber(b.number));
-            
             renderTableForPrint(printDocs);
         };
 
         window.onafterprint = () => {
-            // หลังจากพิมพ์เสร็จ ให้กลับมาแสดงผลแบบล่าสุดขึ้นก่อนเหมือนเดิม
             updateUI();
         };
 
@@ -354,6 +382,27 @@
                 `;
                 tableBody.appendChild(row);
             });
+        }
+
+        function showSuccessSummary(data) {
+            document.getElementById('summaryNum').textContent = data.number;
+            document.getElementById('summarySubject').textContent = data.subject;
+            document.getElementById('summaryDate').textContent = formatThaiDate(data.date);
+            document.getElementById('summaryOwner').textContent = data.owner;
+
+            successModal.classList.remove('hidden');
+            setTimeout(() => {
+                modalContent.classList.remove('scale-95', 'opacity-0');
+                modalContent.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function closeModal() {
+            modalContent.classList.remove('scale-100', 'opacity-100');
+            modalContent.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                successModal.classList.add('hidden');
+            }, 300);
         }
 
         function enterEditMode(doc) {
@@ -423,7 +472,9 @@
                     body: JSON.stringify(payload)
                 });
 
+                showSuccessSummary(payload);
                 resetToNewMode();
+                
                 setTimeout(() => {
                     loadData();
                     submitBtn.disabled = false;
