@@ -247,14 +247,10 @@
                 nextAutoNumber = data.nextNumber;
                 if (!isEditMode) docNumberInput.value = nextAutoNumber;
                 
-                // เก็บข้อมูลดิบ
+                // เก็บข้อมูลหลักแบบเรียงลำดับ บท.1, บท.2... (เพื่อใช้สำหรับการพิมพ์รายงาน)
                 const rawItems = data.items || [];
-                
-                // เรียงลำดับจากเลขทะเบียนน้อยไปมาก (ASC) เพื่อเวลาพิมพ์จะเรียง บท.1, บท.2...
                 documents = rawItems.sort((a, b) => {
-                    const numA = extractDocRunningNumber(a.number);
-                    const numB = extractDocRunningNumber(b.number);
-                    return numA - numB;
+                    return extractDocRunningNumber(a.number) - extractDocRunningNumber(b.number);
                 });
 
                 updateUI();
@@ -265,20 +261,39 @@
             }
         }
 
+        // ฟังก์ชันสำหรับจัดลำดับข้อมูลที่จะนำไปแสดงผลบนหน้าเว็บ
+        function getSortedDocs(docs, isForPrint = false) {
+            // ถ้าเป็นการพิมพ์ (window.print() จะดึงจาก DOM ที่ render ไปแล้ว) 
+            // แต่ในกรณีแสดงผลบน UI เราต้องการ "ล่าสุดขึ้นก่อน"
+            if (isForPrint) {
+                return [...docs]; // ข้อมูลหลักเรียง 1, 2, 3 อยู่แล้ว
+            } else {
+                // สำหรับ UI: เรียงย้อนกลับเอาเลขมาก (ล่าสุด) ขึ้นก่อน
+                return [...docs].sort((a, b) => {
+                    return extractDocRunningNumber(b.number) - extractDocRunningNumber(a.number);
+                });
+            }
+        }
+
         function updateUI() {
             const searchTerm = searchInput.value.toLowerCase();
-            const filteredDocs = documents.filter(doc => 
+            
+            // กรองข้อมูลตามคำค้นหา
+            let filteredDocs = documents.filter(doc => 
                 String(doc.number).toLowerCase().includes(searchTerm) || 
                 String(doc.subject).toLowerCase().includes(searchTerm) ||
                 String(doc.owner).toLowerCase().includes(searchTerm)
             );
 
+            // เรียงลำดับสำหรับการแสดงผล (ล่าสุดขึ้นก่อน)
+            const displayDocs = getSortedDocs(filteredDocs, false);
+
             tableBody.innerHTML = '';
-            if (filteredDocs.length === 0) {
+            if (displayDocs.length === 0) {
                 emptyState.classList.remove('hidden');
             } else {
                 emptyState.classList.add('hidden');
-                filteredDocs.forEach((doc) => {
+                displayDocs.forEach((doc) => {
                     const row = document.createElement('tr');
                     row.className = 'hover:bg-blue-50 transition-colors group';
                     row.innerHTML = `
@@ -302,6 +317,43 @@
             }
             itemCount.textContent = filteredDocs.length;
             document.getElementById('currentPrintDate').textContent = formatThaiDate(new Date());
+        }
+
+        // จัดการเหตุการณ์ก่อนสั่งพิมพ์ เพื่อเรียงลำดับให้ถูกต้องในใบรายงาน
+        window.onbeforeprint = () => {
+            // เมื่อจะพิมพ์ ให้ Render ตารางใหม่แบบเรียงจากน้อยไปมาก
+            const searchTerm = searchInput.value.toLowerCase();
+            let filteredDocs = documents.filter(doc => 
+                String(doc.number).toLowerCase().includes(searchTerm) || 
+                String(doc.subject).toLowerCase().includes(searchTerm) ||
+                String(doc.owner).toLowerCase().includes(searchTerm)
+            );
+            
+            // เรียง 1 -> 2 -> 3 สำหรับการพิมพ์
+            const printDocs = [...filteredDocs].sort((a, b) => extractDocRunningNumber(a.number) - extractDocRunningNumber(b.number));
+            
+            renderTableForPrint(printDocs);
+        };
+
+        window.onafterprint = () => {
+            // หลังจากพิมพ์เสร็จ ให้กลับมาแสดงผลแบบล่าสุดขึ้นก่อนเหมือนเดิม
+            updateUI();
+        };
+
+        function renderTableForPrint(printDocs) {
+            tableBody.innerHTML = '';
+            printDocs.forEach((doc) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-6 py-4 font-bold text-blue-700">${doc.number}</td>
+                    <td class="px-6 py-4 font-medium">${doc.subject}</td>
+                    <td class="px-6 py-4 text-gray-600">${doc.owner}</td>
+                    <td class="px-6 py-4 text-sm whitespace-nowrap">${formatThaiDate(doc.date)}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500 italic">${doc.remark || '-'}</td>
+                    <td class="no-print"></td>
+                `;
+                tableBody.appendChild(row);
+            });
         }
 
         function enterEditMode(doc) {
